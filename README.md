@@ -9,12 +9,12 @@ Two ready-to-run scripts and five library modules, no trading logic, no config g
 | | Name | What it provides |
 |---|---|---|
 | script | `bin/fetch_data.py` | Download klines from Binance and save as Parquet |
-| script | `bin/build_datasets.py` | Validate H1 data and aggregate to H4/D1/W1/M1/Q1 |
+| script | `bin/build_datasets.py` | Validate and aggregate H1 or M15 data into H1/H4/D1/W1/M1/Q1 |
 | lib | `download` | Async batch HTTP fetch from Binance REST API |
 | lib | `normalise` | Convert raw Binance JSON rows to typed OHLCV DataFrame |
 | lib | `store` | Save and load DataFrames as Parquet files |
-| lib | `validate` | Deduplicate, gap-fill, and sanity-check H1 data |
-| lib | `aggregate` | Resample H1 data into H4, D1, W1, M1, Q1 bars |
+| lib | `validate` | Deduplicate, gap-fill, and sanity-check H1 or M15 data |
+| lib | `aggregate` | Resample M15→H1 and H1→H4/D1/W1/M1/Q1 |
 
 ## Install
 
@@ -78,23 +78,34 @@ Defaults: `--market spot`, `--interval h1`, `--start 2017-01-01`, `--output-dir 
 
 ```
 ./bin/build_datasets.py [--symbols SYMBOL[,SYMBOL...]]
+                        [--source-interval h1|m15]
                         [--raw-dir DIR]
                         [--output-dir DIR]
 ```
 
-Reads `{symbol}_H1.parquet` from `--raw-dir`, validates and forward-fills gaps, writes H4/D1/W1/M1/Q1 Parquet files to `--output-dir`.
+Reads `{symbol}_{SOURCE}.parquet` from `--raw-dir`, validates, and writes H1/H4/D1/W1/M1/Q1 Parquet files to `--output-dir`. When `--source-interval m15`, H1 is derived from M15 before aggregating higher timeframes.
 
 ```bash
+# build from H1 source (default)
 ./bin/build_datasets.py --symbols BTCUSDT,ETHUSDT
+
+# build from M15 source — derives H1, H4, D1, W1, M1, Q1
+./bin/build_datasets.py --symbols BTCUSDT,ETHUSDT --source-interval m15
+
 ./bin/build_datasets.py --symbols BTCUSDT --raw-dir /tmp/raw --output-dir /tmp/processed
 ```
 
-Defaults: `--raw-dir ./data/raw`, `--output-dir ./data/processed`.
+Defaults: `--source-interval h1`, `--raw-dir ./data/raw`, `--output-dir ./data/processed`.
 
 ### Full pipeline
 
 ```bash
+# H1 source
 ./bin/fetch_data.py --symbols BTCUSDT,ETHUSDT && ./bin/build_datasets.py --symbols BTCUSDT,ETHUSDT
+
+# M15 source — higher resolution, derives H1 and all higher timeframes
+./bin/fetch_data.py --symbols BTCUSDT,ETHUSDT --interval m15 && \
+./bin/build_datasets.py --symbols BTCUSDT,ETHUSDT --source-interval m15
 ```
 
 ## Embedding
@@ -233,23 +244,25 @@ df = load_parquet(Path("data/BTCUSDT_H1.parquet"))  # UTC index preserved
 ### `validate`
 
 ```python
-from klines.validate import validate_h1
+from klines.validate import validate_h1, validate_m15
 
-df = validate_h1(df)
-# Drops duplicate timestamps (keeps last)
-# Forward-fills gaps with zero-volume candles (O=H=L=C=prev close)
-# Raises ValueError on OHLC sanity violations
-# Drops the last candle if incomplete (open period)
+df = validate_h1(df)   # for H1 source data
+df = validate_m15(df)  # for M15 source data
+# Both:
+# - Drop duplicate timestamps (keeps last)
+# - Forward-fill gaps with zero-volume candles (O=H=L=C=prev close)
+# - Raise ValueError on OHLC sanity violations
+# - Drop the last candle if its period hasn't closed
 ```
 
 Individual functions:
 
 ```python
 from klines.validate import (
-    check_no_gaps,       # raises ValueError if any hourly gap found
+    check_no_gaps,       # raises ValueError if any gap found
     check_no_duplicates, # raises ValueError if duplicate timestamps found
     check_ohlc_sanity,   # raises ValueError on high<low, negative volume, etc.
-    fill_gaps,           # forward-fill missing H1 bars
+    fill_gaps,           # forward-fill missing bars (freq param: "1h" or "15min")
     drop_partial_candle, # remove last bar if its period hasn't closed
 )
 ```
@@ -258,11 +271,12 @@ from klines.validate import (
 
 ```python
 from klines.aggregate import (
-    aggregate_h4,         # 4h bars, UTC-anchored to 2020-01-01
-    aggregate_daily,      # daily bars, midnight UTC
-    aggregate_weekly,     # weekly bars, Monday 00:00 UTC
-    aggregate_monthly,    # monthly bars, 1st of month UTC
-    aggregate_quarterly,  # quarterly bars, Jan/Apr/Jul/Oct 1st UTC
+    aggregate_h1,         # M15 → H1 (requires all 4 bars per hour)
+    aggregate_h4,         # H1 → 4h bars, UTC-anchored to 2020-01-01
+    aggregate_daily,      # H1 → daily bars, midnight UTC
+    aggregate_weekly,     # H1 → weekly bars, Monday 00:00 UTC
+    aggregate_monthly,    # H1 → monthly bars, 1st of month UTC
+    aggregate_quarterly,  # H1 → quarterly bars, Jan/Apr/Jul/Oct 1st UTC
 )
 ```
 
