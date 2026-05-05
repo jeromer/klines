@@ -2,6 +2,7 @@
 """Validate raw H1 data and build H4/D1/W1/M1/Q1 processed datasets."""
 
 import argparse
+import logging
 from pathlib import Path
 
 from klines.aggregate import (
@@ -13,6 +14,8 @@ from klines.aggregate import (
 )
 from klines.store import load_parquet, save_parquet
 from klines.validate import validate_h1
+
+logger = logging.getLogger("klines.build_datasets")
 
 
 def _parse_args(defaults: dict) -> argparse.Namespace:
@@ -47,10 +50,10 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
 def _run(args: argparse.Namespace) -> None:
     for symbol in args.symbols:
         raw_path = args.raw_dir / f"{symbol}_H1.parquet"
-        print(f"{symbol}: loading {raw_path}...")
+        logger.info("%s: loading %s...", symbol, raw_path)
         h1 = load_parquet(raw_path)
 
-        print(f"{symbol}: validating {len(h1)} H1 candles...")
+        logger.info("%s: validating %d H1 candles...", symbol, len(h1))
         h1 = validate_h1(h1)
 
         h4 = aggregate_h4(h1)
@@ -62,7 +65,7 @@ def _run(args: argparse.Namespace) -> None:
         for df, label in [(h4, "H4"), (d1, "D1"), (w1, "W1"), (m1, "M1"), (q1, "Q1")]:
             path = args.output_dir / f"{symbol}_{label}.parquet"
             save_parquet(df, path)
-            print(f"{symbol}: {label}={len(df)} candles → {path}")
+            logger.info("%s: %s=%d candles -> %s", symbol, label, len(df), path)
 
 
 def main(defaults: dict | None = None) -> None:
@@ -71,4 +74,5 @@ def main(defaults: dict | None = None) -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     main()

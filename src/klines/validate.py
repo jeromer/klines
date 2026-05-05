@@ -1,4 +1,8 @@
+import logging
+
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def check_no_gaps(df: pd.DataFrame, freq: str = "1h") -> None:
@@ -16,7 +20,7 @@ def fill_gaps(df: pd.DataFrame, freq: str = "1h") -> pd.DataFrame:
     missing_count = len(expected.difference(df.index))
     if missing_count == 0:
         return df
-    print(f"  warning: {missing_count} gap(s) forward-filled with zero-volume candles")
+    logger.warning("%d gap(s) forward-filled with zero-volume candles", missing_count)
     df = df.reindex(expected)
     df["close"] = df["close"].ffill()
     df[["open", "high", "low"]] = df[["open", "high", "low"]].fillna(df["close"])
@@ -63,7 +67,7 @@ def drop_partial_candle(df: pd.DataFrame, freq: str, now_utc: pd.Timestamp) -> p
 def validate_h1(df: pd.DataFrame) -> pd.DataFrame:
     dupes = df.index.duplicated().sum()
     if dupes > 0:
-        print(f"  warning: {dupes} duplicate timestamp(s) dropped")
+        logger.warning("%d duplicate timestamp(s) dropped", dupes)
         df = df[~df.index.duplicated(keep="last")]
     df = fill_gaps(df, freq="1h")
     check_no_gaps(df, freq="1h")

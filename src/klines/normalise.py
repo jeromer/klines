@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 
 # Binance spot kline timestamps switched from milliseconds to microseconds
@@ -21,6 +23,8 @@ _RAW_COLUMNS: list[str] = [
 
 _OUTPUT_COLUMNS: list[str] = ["open", "high", "low", "close", "volume"]
 
+logger = logging.getLogger(__name__)
+
 
 def normalise_klines(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.copy()
@@ -36,7 +40,7 @@ def normalise_klines(raw: pd.DataFrame) -> pd.DataFrame:
 
     dupes = result.index.duplicated().sum()
     if dupes > 0:
-        print(f"  warning: {dupes} duplicate timestamp(s) dropped from Binance data")
+        logger.warning("%d duplicate timestamp(s) dropped from Binance data", dupes)
         result = result[~result.index.duplicated(keep="last")]
 
     return result
