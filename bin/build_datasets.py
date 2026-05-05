@@ -5,17 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from klines.aggregate import (
-    aggregate_daily,
-    aggregate_h4,
-    aggregate_monthly,
-    aggregate_quarterly,
-    aggregate_weekly,
-)
-from klines.store import load_parquet, save_parquet
-from klines.validate import validate_h1
-
-logger = logging.getLogger("klines.build_datasets")
+from klines.pipeline import build
 
 
 def _parse_args(defaults: dict) -> argparse.Namespace:
@@ -47,30 +37,9 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
     return args
 
 
-def _run(args: argparse.Namespace) -> None:
-    for symbol in args.symbols:
-        raw_path = args.raw_dir / f"{symbol}_H1.parquet"
-        logger.info("%s: loading %s...", symbol, raw_path)
-        h1 = load_parquet(raw_path)
-
-        logger.info("%s: validating %d H1 candles...", symbol, len(h1))
-        h1 = validate_h1(h1)
-
-        h4 = aggregate_h4(h1)
-        d1 = aggregate_daily(h1)
-        w1 = aggregate_weekly(h1)
-        m1 = aggregate_monthly(h1)
-        q1 = aggregate_quarterly(h1)
-
-        for df, label in [(h4, "H4"), (d1, "D1"), (w1, "W1"), (m1, "M1"), (q1, "Q1")]:
-            path = args.output_dir / f"{symbol}_{label}.parquet"
-            save_parquet(df, path)
-            logger.info("%s: %s=%d candles -> %s", symbol, label, len(df), path)
-
-
 def main(defaults: dict | None = None) -> None:
     args = _parse_args(defaults or {})
-    _run(args)
+    build(args.symbols, args.raw_dir, args.output_dir)
 
 
 if __name__ == "__main__":

@@ -8,13 +8,8 @@ import logging
 import os
 from pathlib import Path
 
-import pandas as pd
-
-from klines.download import FUTURES_URL, SPOT_URL, KlineRequest, ProgressCallback, fetch_all
-from klines.normalise import normalise_klines
-from klines.store import load_parquet, save_parquet
-
-logger = logging.getLogger("klines.fetch_data")
+from klines.download import FUTURES_URL, SPOT_URL
+from klines.pipeline import FetchConfig, fetch
 
 _INTERVAL_MAP: dict[str, tuple[str, str]] = {
     "m15": ("15m", "M15"),
@@ -88,64 +83,20 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
     return args
 
 
-def _make_progress_callback() -> ProgressCallback:
-    def on_progress(symbol: str, done: int, total: int) -> None:
-        if done == total:
-            logger.info("%s: %d/%d batches downloaded", symbol, done, total)
-        else:
-            logger.debug("%s: %d/%d batches", symbol, done, total)
-
-    return on_progress
-
-
-def _resume_start_ms(path: Path, default_start: str) -> int:
-    if path.exists():
-        existing = load_parquet(path)
-        if not existing.empty:
-            return int(existing.index[-1].timestamp() * 1000) + 1
-    return int(pd.Timestamp(default_start, tz="UTC").timestamp() * 1000)
-
-
-async def _run(args: argparse.Namespace) -> None:
-    binance_interval, filename_suffix = _INTERVAL_MAP[args.interval]
-    url = _MARKET_URL[args.market]
-    end_ms = int(pd.Timestamp(args.end, tz="UTC").timestamp() * 1000)
-
-    requests = []
-    for symbol in args.symbols:
-        path = args.output_dir / f"{symbol}_{filename_suffix}.parquet"
-        start_ms = _resume_start_ms(path, args.start)
-        if start_ms >= end_ms:
-            logger.info("%s: already up to date", symbol)
-            continue
-        requests.append(
-            KlineRequest(symbol=symbol, interval=binance_interval, start_ms=start_ms, end_ms=end_ms, url=url)
-        )
-
-    if not requests:
-        return
-
-    on_progress = _make_progress_callback() if args.progress else None
-    logger.info(
-        "Downloading %d symbol(s) [%s/%s] with up to %d concurrent workers...",
-        len(requests), args.market, args.interval, args.workers,
-    )
-    raw_by_symbol = await fetch_all(requests, max_workers=args.workers, on_progress=on_progress)
-
-    for symbol, raw_df in raw_by_symbol.items():
-        new_df = normalise_klines(raw_df)
-        path = args.output_dir / f"{symbol}_{filename_suffix}.parquet"
-        if path.exists():
-            existing = load_parquet(path)
-            new_df = pd.concat([existing, new_df]).sort_index()
-            new_df = new_df[~new_df.index.duplicated(keep="last")]
-        save_parquet(new_df, path)
-        logger.info("%s: %d candles total -> %s", symbol, len(new_df), path)
-
-
 def main(defaults: dict | None = None) -> None:
     args = _parse_args(defaults or {})
-    asyncio.run(_run(args))
+    binance_interval, filename_suffix = _INTERVAL_MAP[args.interval]
+    asyncio.run(fetch(FetchConfig(
+        symbols=args.symbols,
+        url=_MARKET_URL[args.market],
+        interval=binance_interval,
+        filename_suffix=filename_suffix,
+        start=args.start,
+        end=args.end,
+        output_dir=args.output_dir,
+        workers=args.workers,
+        progress=args.progress,
+    )))
 
 
 if __name__ == "__main__":
