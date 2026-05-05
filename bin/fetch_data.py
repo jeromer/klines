@@ -13,13 +13,13 @@ from klines.pipeline import FetchConfig, fetch
 
 _INTERVAL_MAP: dict[str, tuple[str, str]] = {
     "m15": ("15m", "M15"),
-    "h1":  ("1h",  "H1"),
-    "h4":  ("4h",  "H4"),
-    "d":   ("1d",  "D1"),
+    "h1": ("1h", "H1"),
+    "h4": ("4h", "H4"),
+    "d": ("1d", "D1"),
 }
 
 _MARKET_URL: dict[str, str] = {
-    "spot":    SPOT_URL,
+    "spot": SPOT_URL,
     "futures": FUTURES_URL,
 }
 
@@ -86,17 +86,21 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
 def main(defaults: dict | None = None) -> None:
     args = _parse_args(defaults or {})
     binance_interval, filename_suffix = _INTERVAL_MAP[args.interval]
-    asyncio.run(fetch(FetchConfig(
-        symbols=args.symbols,
-        url=_MARKET_URL[args.market],
-        interval=binance_interval,
-        filename_suffix=filename_suffix,
-        start=args.start,
-        end=args.end,
-        output_dir=args.output_dir,
-        workers=args.workers,
-        progress=args.progress,
-    )))
+    asyncio.run(
+        fetch(
+            FetchConfig(
+                symbols=args.symbols,
+                url=_MARKET_URL[args.market],
+                interval=binance_interval,
+                filename_suffix=filename_suffix,
+                start=args.start,
+                end=args.end,
+                output_dir=args.output_dir,
+                workers=args.workers,
+                progress=args.progress,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

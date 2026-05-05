@@ -9,7 +9,9 @@ from klines.pipeline import build
 
 
 def _parse_args(defaults: dict) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build processed OHLCV datasets from H1 Parquet files")
+    parser = argparse.ArgumentParser(
+        description="Build processed OHLCV datasets from H1 Parquet files"
+    )
     parser.add_argument(
         "--symbols",
         type=lambda s: s.split(","),
@@ -23,6 +25,12 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
         default=Path(defaults.get("raw_dir", "./data/raw")),
         metavar="DIR",
         help="directory containing raw H1 Parquet files (default: ./data/raw)",
+    )
+    parser.add_argument(
+        "--source-interval",
+        choices=["h1", "m15"],
+        default="h1",
+        help="source candle interval to build from (default: h1)",
     )
     parser.add_argument(
         "--output-dir",
@@ -39,7 +47,7 @@ def _parse_args(defaults: dict) -> argparse.Namespace:
 
 def main(defaults: dict | None = None) -> None:
     args = _parse_args(defaults or {})
-    build(args.symbols, args.raw_dir, args.output_dir)
+    build(args.symbols, args.raw_dir, args.output_dir, source=args.source_interval)
 
 
 if __name__ == "__main__":

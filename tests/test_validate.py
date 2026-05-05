@@ -6,8 +6,9 @@ from klines.validate import (
     check_no_gaps,
     check_ohlc_sanity,
     drop_partial_candle,
+    validate_m15,
 )
-from conftest import make_h1_bars
+from conftest import make_h1_bars, make_m15_bars
 
 
 def test_no_gaps_passes_on_clean_series():
@@ -70,3 +71,35 @@ def test_drop_partial_candle_keeps_last_if_complete():
     now = df.index[-1] + pd.Timedelta(hours=2)
     result = drop_partial_candle(df, freq="1h", now_utc=now)
     assert len(result) == 10
+
+
+# ---------------------------------------------------------------------------
+# validate_m15
+# ---------------------------------------------------------------------------
+
+
+def test_validate_m15_drops_duplicate_timestamps():
+    df = make_m15_bars("2023-01-01", 8)
+    df = pd.concat([df, df.iloc[[3]]])
+    result = validate_m15(df)
+
+    assert result.index.duplicated().sum() == 0
+    assert len(result) == 8
+
+
+def test_validate_m15_fills_gap_with_zero_volume():
+    df = make_m15_bars("2023-01-01 00:00", 8)
+    df = df.drop(df.index[3])
+    result = validate_m15(df)
+
+    assert len(result) == 8
+    assert result.iloc[3]["volume"] == 0.0
+
+
+def test_validate_m15_drops_partial_tail_candle():
+    df = make_m15_bars("2023-01-01 00:00", 4)
+    now = df.index[-1] + pd.Timedelta(minutes=7)
+    from klines.validate import drop_partial_candle
+
+    result = drop_partial_candle(df, freq="15min", now_utc=now)
+    assert len(result) == 3

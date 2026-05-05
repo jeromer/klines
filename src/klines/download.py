@@ -50,14 +50,23 @@ async def _fetch_symbol(
     on_progress: ProgressCallback | None,
 ) -> pd.DataFrame:
     interval_ms = _INTERVAL_MS[req.interval]
-    batch_starts = list(
-        range(req.start_ms, req.end_ms, MAX_BARS_PER_REQUEST * interval_ms)
-    )
+    batch_starts = list(range(req.start_ms, req.end_ms, MAX_BARS_PER_REQUEST * interval_ms))
     total = len(batch_starts)
     counter: dict[str, int] = defaultdict(int)
 
     tasks = [
-        _fetch_batch(session, semaphore, req.symbol, req.interval, req.url, start, req.end_ms, counter, total, on_progress)
+        _fetch_batch(
+            session,
+            semaphore,
+            req.symbol,
+            req.interval,
+            req.url,
+            start,
+            req.end_ms,
+            counter,
+            total,
+            on_progress,
+        )
         for start in batch_starts
     ]
     batches = await asyncio.gather(*tasks)

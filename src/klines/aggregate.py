@@ -11,11 +11,12 @@ _OHLCV_AGG: dict[str, str] = {
     "volume": "sum",
 }
 
+_H1_BARS = 4  # 4 × 15m = 1h; require all bars
 _H4_BARS = 4
 _DAILY_BARS = 24
-_WEEKLY_BARS = 6 * 24        # 144 H1 bars (≥ 86% of week, accepts 1-bar gaps)
-_MONTHLY_BARS = 27 * 24      # 648 H1 bars (≥ 96% of shortest month, accepts 1-bar gaps)
-_QUARTERLY_BARS = 87 * 24    # 2088 H1 bars (≥ 96.7% of shortest quarter, accepts gaps)
+_WEEKLY_BARS = 6 * 24  # 144 H1 bars (≥ 86% of week, accepts 1-bar gaps)
+_MONTHLY_BARS = 27 * 24  # 648 H1 bars (≥ 96% of shortest month, accepts 1-bar gaps)
+_QUARTERLY_BARS = 87 * 24  # 2088 H1 bars (≥ 96.7% of shortest quarter, accepts gaps)
 
 
 def _resample(
@@ -25,6 +26,10 @@ def _resample(
     counts = resampled["open"].count()
     agg = resampled.agg(_OHLCV_AGG)
     return agg[counts >= min_bars]
+
+
+def aggregate_h1(m15: pd.DataFrame) -> pd.DataFrame:
+    return _resample(m15, "1h", "start_day", _H1_BARS)
 
 
 def aggregate_h4(h1: pd.DataFrame) -> pd.DataFrame:

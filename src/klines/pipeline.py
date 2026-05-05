@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ import pandas as pd
 
 from klines.aggregate import (
     aggregate_daily,
+    aggregate_h1,
     aggregate_h4,
     aggregate_monthly,
     aggregate_quarterly,
@@ -16,7 +16,7 @@ from klines.aggregate import (
 from klines.download import KlineRequest, ProgressCallback, fetch_all
 from klines.normalise import normalise_klines
 from klines.store import load_parquet, save_parquet
-from klines.validate import validate_h1
+from klines.validate import validate_h1, validate_m15
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,19 @@ _TIMEFRAMES: list[tuple[str, Callable[[pd.DataFrame], pd.DataFrame]]] = [
     ("M1", aggregate_monthly),
     ("Q1", aggregate_quarterly),
 ]
+
+
+@dataclass(frozen=True)
+class _SourceSpec:
+    suffix: str
+    validate_fn: Callable[[pd.DataFrame], pd.DataFrame]
+    to_h1: Callable[[pd.DataFrame], pd.DataFrame] | None  # None = input is already H1
+
+
+_SPECS: dict[str, _SourceSpec] = {
+    "h1": _SourceSpec("H1", validate_h1, None),
+    "m15": _SourceSpec("M15", validate_m15, aggregate_h1),
+}
 
 
 @dataclass(frozen=True)
@@ -70,13 +83,15 @@ async def fetch(config: FetchConfig) -> None:
         if start_ms >= end_ms:
             logger.info("%s: already up to date", symbol)
             continue
-        requests.append(KlineRequest(
-            symbol=symbol,
-            interval=config.interval,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            url=config.url,
-        ))
+        requests.append(
+            KlineRequest(
+                symbol=symbol,
+                interval=config.interval,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                url=config.url,
+            )
+        )
 
     if not requests:
         return
@@ -84,7 +99,8 @@ async def fetch(config: FetchConfig) -> None:
     on_progress = _make_progress_callback() if config.progress else None
     logger.info(
         "Downloading %d symbol(s) with up to %d concurrent workers...",
-        len(requests), config.workers,
+        len(requests),
+        config.workers,
     )
     raw_by_symbol = await fetch_all(requests, max_workers=config.workers, on_progress=on_progress)
 
@@ -99,14 +115,15 @@ async def fetch(config: FetchConfig) -> None:
         logger.info("%s: %d candles total -> %s", symbol, len(new_df), path)
 
 
-def build(symbols: list[str], raw_dir: Path, output_dir: Path) -> None:
+def build(symbols: list[str], raw_dir: Path, output_dir: Path, source: str = "h1") -> None:
+    spec = _SPECS[source]
     for symbol in symbols:
-        raw_path = raw_dir / f"{symbol}_H1.parquet"
-        logger.info("%s: loading %s...", symbol, raw_path)
-        h1 = validate_h1(load_parquet(raw_path))
-
-        for label, aggregate_fn in _TIMEFRAMES:
-            df = aggregate_fn(h1)
+        raw = spec.validate_fn(load_parquet(raw_dir / f"{symbol}_{spec.suffix}.parquet"))
+        h1 = spec.to_h1(raw) if spec.to_h1 else raw
+        outputs: list[tuple[str, pd.DataFrame]] = [("H1", h1)] + [
+            (label, fn(h1)) for label, fn in _TIMEFRAMES
+        ]
+        for label, df in outputs:
             path = output_dir / f"{symbol}_{label}.parquet"
             save_parquet(df, path)
             logger.info("%s: %s=%d candles -> %s", symbol, label, len(df), path)

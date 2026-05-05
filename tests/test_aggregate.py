@@ -2,12 +2,64 @@ import pandas as pd
 
 from klines.aggregate import (
     aggregate_daily,
+    aggregate_h1,
     aggregate_h4,
     aggregate_monthly,
     aggregate_quarterly,
     aggregate_weekly,
 )
-from conftest import make_h1_bars
+from conftest import make_h1_bars, make_m15_bars
+
+
+# ---------------------------------------------------------------------------
+# aggregate_h1 (M15 → H1)
+# ---------------------------------------------------------------------------
+
+
+def test_h1_from_m15_four_bars_make_one_hour():
+    df = make_m15_bars("2023-01-01 00:00", 4)
+    result = aggregate_h1(df)
+
+    assert len(result) == 1
+    assert result.index[0] == pd.Timestamp("2023-01-01 00:00:00", tz="UTC")
+
+
+def test_h1_from_m15_ohlcv_aggregation():
+    index = pd.date_range("2023-01-01 00:00", periods=4, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": [10.0, 20.0, 30.0, 40.0],
+            "high": [15.0, 25.0, 35.0, 45.0],
+            "low": [8.0, 18.0, 28.0, 38.0],
+            "close": [12.0, 22.0, 32.0, 42.0],
+            "volume": [100.0, 200.0, 300.0, 400.0],
+        },
+        index=index,
+    )
+    result = aggregate_h1(df)
+
+    assert result.iloc[0]["open"] == 10.0
+    assert result.iloc[0]["high"] == 45.0
+    assert result.iloc[0]["low"] == 8.0
+    assert result.iloc[0]["close"] == 42.0
+    assert result.iloc[0]["volume"] == 1000.0
+
+
+def test_h1_from_m15_drops_partial_tail():
+    # 5 M15 bars = 1 complete H1 + 1 orphan bar
+    df = make_m15_bars("2023-01-01 00:00", 5)
+    result = aggregate_h1(df)
+
+    assert len(result) == 1
+
+
+def test_h1_from_m15_multi_hour():
+    df = make_m15_bars("2023-01-01 00:00", 8)
+    result = aggregate_h1(df)
+
+    assert len(result) == 2
+    assert result.index[0] == pd.Timestamp("2023-01-01 00:00:00", tz="UTC")
+    assert result.index[1] == pd.Timestamp("2023-01-01 01:00:00", tz="UTC")
 
 
 def test_h4_boundary_anchoring():

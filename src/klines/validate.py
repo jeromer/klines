@@ -10,8 +10,7 @@ def check_no_gaps(df: pd.DataFrame, freq: str = "1h") -> None:
     missing = expected.difference(df.index)
     if len(missing) > 0:
         raise ValueError(
-            f"{len(missing)} gap(s) found in {freq} series. "
-            f"First missing: {missing[:3].tolist()}"
+            f"{len(missing)} gap(s) found in {freq} series. First missing: {missing[:3].tolist()}"
         )
 
 
@@ -32,8 +31,7 @@ def check_no_duplicates(df: pd.DataFrame) -> None:
     dupes = df.index[df.index.duplicated()]
     if len(dupes) > 0:
         raise ValueError(
-            f"{len(dupes)} duplicate timestamp(s) found. "
-            f"First duplicates: {dupes[:3].tolist()}"
+            f"{len(dupes)} duplicate timestamp(s) found. First duplicates: {dupes[:3].tolist()}"
         )
 
 
@@ -49,8 +47,7 @@ def check_ohlc_sanity(df: pd.DataFrame) -> None:
     count = violations.sum()
     if count > 0:
         raise ValueError(
-            f"{count} OHLC sanity violation(s) found. "
-            f"Sample rows:\n{df[violations].head(3)}"
+            f"{count} OHLC sanity violation(s) found. Sample rows:\n{df[violations].head(3)}"
         )
 
 
@@ -73,3 +70,14 @@ def validate_h1(df: pd.DataFrame) -> pd.DataFrame:
     check_no_gaps(df, freq="1h")
     check_ohlc_sanity(df)
     return drop_partial_candle(df, freq="1h", now_utc=pd.Timestamp.now(tz="UTC"))
+
+
+def validate_m15(df: pd.DataFrame) -> pd.DataFrame:
+    dupes = df.index.duplicated().sum()
+    if dupes > 0:
+        logger.warning("%d duplicate timestamp(s) dropped", dupes)
+        df = df[~df.index.duplicated(keep="last")]
+    df = fill_gaps(df, freq="15min")
+    check_no_gaps(df, freq="15min")
+    check_ohlc_sanity(df)
+    return drop_partial_candle(df, freq="15min", now_utc=pd.Timestamp.now(tz="UTC"))
