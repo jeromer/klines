@@ -74,7 +74,7 @@ def _make_progress_callback() -> ProgressCallback:
 
 
 async def fetch(config: FetchConfig) -> None:
-    end_ms = int(pd.Timestamp(config.end, tz="UTC").timestamp() * 1000)
+    end_ms = int((pd.Timestamp(config.end, tz="UTC") + pd.Timedelta(days=1)).timestamp() * 1000)
 
     requests = []
     for symbol in config.symbols:
