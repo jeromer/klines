@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 
 def check_no_gaps(df: pd.DataFrame, freq: str = "1h") -> None:
+    if df.empty:
+        return
     expected = pd.date_range(df.index[0], df.index[-1], freq=freq, tz="UTC")
     missing = expected.difference(df.index)
     if len(missing) > 0:
@@ -15,6 +17,8 @@ def check_no_gaps(df: pd.DataFrame, freq: str = "1h") -> None:
 
 
 def fill_gaps(df: pd.DataFrame, freq: str = "1h") -> pd.DataFrame:
+    if df.empty:
+        return df
     expected = pd.date_range(df.index[0], df.index[-1], freq=freq, tz="UTC")
     missing_count = len(expected.difference(df.index))
     if missing_count == 0:

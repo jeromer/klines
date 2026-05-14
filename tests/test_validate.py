@@ -6,9 +6,37 @@ from klines.validate import (
     check_no_gaps,
     check_ohlc_sanity,
     drop_partial_candle,
+    fill_gaps,
+    validate_h1,
     validate_m15,
 )
 from conftest import make_h1_bars, make_m15_bars
+
+
+def make_empty_df() -> pd.DataFrame:
+    index = pd.DatetimeIndex([], tz="UTC")
+    return pd.DataFrame(
+        columns=["open", "high", "low", "close", "volume"], index=index, dtype=float
+    )
+
+
+def test_check_no_gaps_empty_df_passes():
+    check_no_gaps(make_empty_df())  # must not raise
+
+
+def test_fill_gaps_empty_df_returns_empty():
+    result = fill_gaps(make_empty_df())
+    assert result.empty
+
+
+def test_validate_h1_empty_df_returns_empty():
+    result = validate_h1(make_empty_df())
+    assert result.empty
+
+
+def test_validate_m15_empty_df_returns_empty():
+    result = validate_m15(make_empty_df())
+    assert result.empty
 
 
 def test_no_gaps_passes_on_clean_series():
